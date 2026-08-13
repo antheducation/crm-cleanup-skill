@@ -1,0 +1,309 @@
+skill: crm-cleanup
+version: "0.2.1"
+
+catalog:
+  kind: graph
+  audience: operator
+  visibility: public
+  role: canonical
+  execution: execute
+  completion: runtime_receipt
+  requires_adapter: false
+  approval: none
+
+harness:
+  cases:
+    - name: crm-cleanup-applies-traced-updates
+      inputs:
+        crm_source:
+          kind: web_fetch
+          allowlist: [raw.githubusercontent.com]
+          url: "https://raw.githubusercontent.com/antheducation/runx/crm-cleanup-executed-writes/harness-data/crm-records-globex.json"
+        transcript: "Call with Globex on renewal. Dana said the rollout stalled and they want an executive review before renewing. Next step agreed: send the Q3 usage report by Friday."
+        crm_schema:
+          allowed_fields: [account_status, next_action, health_score]
+      caller:
+        answers:
+          agent_task.crm-cleanup-reconcile.output:
+            update_draft:
+              takeaways:
+                - Globex rollout stalled; renewal is at risk pending an executive review.
+                - Next step is sending the Q3 usage report by Friday.
+              updates:
+                - record_id: acct-globex
+                  field: account_status
+                  to: at_risk
+                  evidence_quote: the rollout stalled and they want an executive review before renewing
+                - record_id: acct-globex
+                  field: next_action
+                  to: send the Q3 usage report by Friday
+                  evidence_quote: "send the Q3 usage report by Friday"
+      expect:
+        status: sealed
+        steps: [fetch-source, normalize-records, digest-transcript, digest-records, reconcile, decide, execute-writes, finalize]
+        step_outputs:
+          finalize:
+            subset:
+              crm_cleanup_result:
+                data:
+                  schema: runx.crm_cleanup_result.v1
+                  decision: applied
+                  rejected_updates: []
+                  source_read: { kind: web_fetch, ref: "https://raw.githubusercontent.com/antheducation/runx/crm-cleanup-executed-writes/harness-data/crm-records-globex.json", count: 1 }
+                  write_result:
+                    schema: runx.crm_write_result.v1
+                    executed: true
+                    transport: mock-crm.v1
+                    applied:
+                      - record_id: acct-globex
+                        field: account_status
+                        from: healthy
+                        to: at_risk
+                      - record_id: acct-globex
+                        field: next_action
+                        from: none
+                        to: send the Q3 usage report by Friday
+                    after:
+                      - id: acct-globex
+                        account_status: at_risk
+                        next_action: send the Q3 usage report by Friday
+                  validation: { status: pass, findings: [] }
+        receipt: { schema: runx.receipt.v1 }
+
+    - name: crm-cleanup-noop-executes-nothing
+      inputs:
+        crm_source:
+          kind: web_fetch
+          allowlist: [raw.githubusercontent.com]
+          url: "https://raw.githubusercontent.com/antheducation/runx/crm-cleanup-executed-writes/harness-data/crm-records-acct1-status.json"
+        transcript: "Short check-in call. Everything on track, no changes discussed."
+        crm_schema:
+          allowed_fields: [account_status, next_action]
+      caller:
+        answers:
+          agent_task.crm-cleanup-reconcile.output:
+            update_draft:
+              takeaways:
+                - Routine check-in; account remains on track.
+              updates: []
+      expect:
+        status: sealed
+        steps: [fetch-source, normalize-records, digest-transcript, digest-records, reconcile, decide, execute-writes, finalize]
+        step_outputs:
+          finalize:
+            subset:
+              crm_cleanup_result:
+                data:
+                  schema: runx.crm_cleanup_result.v1
+                  decision: no_action
+                  field_updates: []
+                  write_result: { executed: false, transport: mock-crm.v1, applied: [] }
+                  validation: { status: pass, findings: [] }
+        receipt: { schema: runx.receipt.v1 }
+
+    - name: crm-cleanup-rejects-unlisted-field
+      inputs:
+        crm_source:
+          kind: web_fetch
+          allowlist: [raw.githubusercontent.com]
+          url: "https://raw.githubusercontent.com/antheducation/runx/crm-cleanup-executed-writes/harness-data/crm-records-acct1-owner.json"
+        transcript: "Owner said move the account to Kim."
+        crm_schema:
+          allowed_fields: [next_action]
+      caller:
+        answers:
+          agent_task.crm-cleanup-reconcile.output:
+            update_draft:
+              updates:
+                - record_id: acct-1
+                  field: owner
+                  to: kim
+                  evidence_quote: move the account to Kim
+      expect:
+        status: sealed
+        steps: [fetch-source, normalize-records, digest-transcript, digest-records, reconcile, decide, execute-writes, finalize]
+        step_outputs:
+          finalize:
+            subset:
+              crm_cleanup_result:
+                data:
+                  decision: no_action
+                  field_updates: []
+                  write_result: { executed: false, transport: mock-crm.v1, applied: [] }
+                  rejected_updates:
+                    - record_id: acct-1
+                      field: owner
+                      reason: field is outside the crm_schema allowlist
+                  validation: { status: pass, findings: [] }
+        receipt: { schema: runx.receipt.v1 }
+
+    - name: crm-cleanup-refuses-invented-quote
+      inputs:
+        crm_source:
+          kind: web_fetch
+          allowlist: [raw.githubusercontent.com]
+          url: "https://raw.githubusercontent.com/antheducation/runx/crm-cleanup-executed-writes/harness-data/crm-records-acct1-status.json"
+        transcript: "Short call, no changes discussed."
+        crm_schema:
+          allowed_fields: [account_status]
+      caller:
+        answers:
+          agent_task.crm-cleanup-reconcile.output:
+            update_draft:
+              updates:
+                - record_id: acct-1
+                  field: account_status
+                  to: at_risk
+                  evidence_quote: customer threatened to churn immediately
+      expect:
+        status: sealed
+        steps: [fetch-source, normalize-records, digest-transcript, digest-records, reconcile, decide, execute-writes, finalize]
+        step_outputs:
+          finalize:
+            subset:
+              crm_cleanup_result:
+                data:
+                  decision: refused
+                  field_updates: []
+                  write_result: { executed: false, transport: mock-crm.v1, applied: [] }
+                  validation: { status: fail }
+        receipt: { schema: runx.receipt.v1 }
+
+    - name: crm-cleanup-needs-transcript
+      inputs:
+        crm_source:
+          kind: web_fetch
+          allowlist: [raw.githubusercontent.com]
+          url: "https://raw.githubusercontent.com/antheducation/runx/crm-cleanup-executed-writes/harness-data/crm-records-acct1-status.json"
+        crm_schema:
+          allowed_fields: [next_action]
+      expect:
+        status: failure
+
+runners:
+  reconcile:
+    default: true
+    type: graph
+    inputs:
+      crm_source:
+        type: object
+        required: true
+        description: Source handle for the current CRM records. A data-store read_projection URL, connector export URL, or web-fetch URL (kind read_projection, connector_export, or web_fetch, with an https url) is read at run time; the handle carries the host allowlist for the fetch. Shape is enforced deterministically in normalizeRecords.
+      transcript:
+        type: string
+        required: true
+        description: Call transcript that is the only evidence for decided updates.
+      crm_schema:
+        type: object
+        required: true
+        description: Explicit update authority (allowed_fields array); fields outside allowed_fields are rejected. Shape is enforced deterministically in decideUpdates.
+    graph:
+      name: crm-cleanup-reconcile
+      result_from: [finalize]
+      steps:
+        - id: fetch-source
+          label: read the current CRM records from the source
+          tool: web.fetch
+          scopes:
+            - net:allowlist
+          inputs:
+            url: $input.crm_source.url
+            allowlist: $input.crm_source.allowlist
+            extract: text
+            max_bytes: 1000000
+
+        - id: normalize-records
+          label: normalize the source read into the working record set
+          inputs:
+            crm_source: $input.crm_source
+          context:
+            source_fetch: fetch-source.fetch_result.data
+          run:
+            type: javascript
+            module: crm-cleanup.mjs
+            export: normalizeRecords
+            outputs:
+              source_read: object
+          artifacts:
+            named_emits:
+              source_read: source_read
+
+        - id: digest-transcript
+          tool: data.digest
+          inputs:
+            value: $input.transcript
+            encoding: utf8_text
+
+        - id: digest-records
+          tool: data.digest
+          context:
+            value: normalize-records.source_read.data.records
+
+        - id: reconcile
+          label: derive candidate field updates from the transcript
+          run:
+            type: agent-task
+            agent: reviewer
+            task: crm-cleanup-reconcile
+            outputs:
+              update_draft: object
+          inputs:
+            transcript: $input.transcript
+            crm_schema: $input.crm_schema
+          context:
+            crm_records: normalize-records.source_read.data.records
+          allowed_tools: []
+          artifacts:
+            named_emits:
+              update_draft: update_draft
+
+        - id: decide
+          label: enforce allowlist and transcript traceability deterministically
+          inputs:
+            transcript: $input.transcript
+            crm_schema: $input.crm_schema
+          context:
+            update_draft: reconcile.update_draft.data
+            source_read: normalize-records.source_read.data
+            transcript_digest: digest-transcript.digest_result.data.digest
+            records_digest: digest-records.digest_result.data.digest
+          run:
+            type: javascript
+            module: crm-cleanup.mjs
+            export: decideUpdates
+            outputs:
+              crm_decision: object
+          artifacts:
+            named_emits:
+              crm_decision: crm_decision
+
+        - id: execute-writes
+          label: execute the decided updates through the CRM transport (seals executed=false when nothing is actionable)
+          context:
+            crm_decision: decide.crm_decision.data
+            source_read: normalize-records.source_read.data
+          run:
+            type: javascript
+            module: crm-cleanup.mjs
+            export: executeWrites
+            outputs:
+              write_result: object
+          artifacts:
+            named_emits:
+              write_result: write_result
+
+        - id: finalize
+          label: seal the cleanup result with the executed write bound to the decision
+          context:
+            crm_decision: decide.crm_decision.data
+            source_read: normalize-records.source_read.data
+            write_result: execute-writes.write_result.data
+          run:
+            type: javascript
+            module: crm-cleanup.mjs
+            export: finalizeResult
+            outputs:
+              crm_cleanup_result: object
+          artifacts:
+            named_emits:
+              crm_cleanup_result: crm_cleanup_result
