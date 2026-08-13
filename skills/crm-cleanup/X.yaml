@@ -35,6 +35,11 @@ harness:
         crm_schema:
           allowed_fields: [account_status, next_action, health_score]
       caller:
+        http_responses:
+          "https://raw.githubusercontent.com/antheducation/runx/crm-cleanup-executed-writes/harness-data/crm-records-globex.json":
+            status: 200
+            headers: { content-type: application/json }
+            body: '[{"id":"acct-globex","account_status":"healthy","next_action":"none"}]'
         answers:
           agent_task.crm-cleanup-reconcile.output:
             update_draft:
@@ -92,6 +97,11 @@ harness:
         crm_schema:
           allowed_fields: [account_status, next_action]
       caller:
+        http_responses:
+          "https://raw.githubusercontent.com/antheducation/runx/crm-cleanup-executed-writes/harness-data/crm-records-acct1-status.json":
+            status: 200
+            headers: { content-type: application/json }
+            body: '[{"id":"acct-1","account_status":"healthy"}]'
         answers:
           agent_task.crm-cleanup-reconcile.output:
             update_draft:
@@ -123,6 +133,11 @@ harness:
         crm_schema:
           allowed_fields: [next_action]
       caller:
+        http_responses:
+          "https://raw.githubusercontent.com/antheducation/runx/crm-cleanup-executed-writes/harness-data/crm-records-acct1-owner.json":
+            status: 200
+            headers: { content-type: application/json }
+            body: '[{"id":"acct-1","owner":"lee"}]'
         answers:
           agent_task.crm-cleanup-reconcile.output:
             update_draft:
@@ -159,6 +174,11 @@ harness:
         crm_schema:
           allowed_fields: [account_status]
       caller:
+        http_responses:
+          "https://raw.githubusercontent.com/antheducation/runx/crm-cleanup-executed-writes/harness-data/crm-records-acct1-status.json":
+            status: 200
+            headers: { content-type: application/json }
+            body: '[{"id":"acct-1","account_status":"healthy"}]'
         answers:
           agent_task.crm-cleanup-reconcile.output:
             update_draft:
